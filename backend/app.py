@@ -1,6 +1,7 @@
 """Flask backend for the Todo app.
 
-A small REST API backed by SQLite. Exposes CRUD endpoints under /api/todos.
+A small REST API backed by SQLite. Exposes CRUD endpoints under /api/todos,
+plus PUT /api/todos/reorder for drag-and-drop ordering.
 Run with:  python app.py   (listens on http://127.0.0.1:5000)
 """
 import sqlite3
@@ -29,10 +30,16 @@ def init_db():
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
                 title     TEXT    NOT NULL,
                 completed INTEGER NOT NULL DEFAULT 0,
+                position  INTEGER,
                 created_at TEXT   NOT NULL DEFAULT (datetime('now'))
             )
             """
         )
+        # Migrate older databases that predate the `position` column.
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(todos)")]
+        if "position" not in cols:
+            conn.execute("ALTER TABLE todos ADD COLUMN position INTEGER")
+        conn.execute("UPDATE todos SET position = id WHERE position IS NULL")
 
 
 def row_to_dict(row):
@@ -47,7 +54,9 @@ def row_to_dict(row):
 @app.get("/api/todos")
 def list_todos():
     with get_db() as conn:
-        rows = conn.execute("SELECT * FROM todos ORDER BY id DESC").fetchall()
+        rows = conn.execute(
+            "SELECT * FROM todos ORDER BY position ASC, id DESC"
+        ).fetchall()
     return jsonify([row_to_dict(r) for r in rows])
 
 
@@ -58,9 +67,29 @@ def create_todo():
     if not title:
         abort(400, description="title is required")
     with get_db() as conn:
-        cur = conn.execute("INSERT INTO todos (title) VALUES (?)", (title,))
+        # New tasks go to the top (smallest position).
+        cur = conn.execute(
+            "INSERT INTO todos (title, position) "
+            "VALUES (?, (SELECT COALESCE(MIN(position), 1) - 1 FROM todos))",
+            (title,),
+        )
         row = conn.execute("SELECT * FROM todos WHERE id = ?", (cur.lastrowid,)).fetchone()
     return jsonify(row_to_dict(row)), 201
+
+
+@app.put("/api/todos/reorder")
+def reorder_todos():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        abort(400, description="ids must be a list")
+    with get_db() as conn:
+        for pos, todo_id in enumerate(ids):
+            conn.execute("UPDATE todos SET position = ? WHERE id = ?", (pos, todo_id))
+        rows = conn.execute(
+            "SELECT * FROM todos ORDER BY position ASC, id DESC"
+        ).fetchall()
+    return jsonify([row_to_dict(r) for r in rows])
 
 
 @app.put("/api/todos/<int:todo_id>")

@@ -35,4 +35,12 @@ export const api = {
   remove(id: number): Promise<void> {
     return fetch(`${BASE}/${id}`, { method: 'DELETE' }).then((r) => handle<void>(r))
   },
+
+  reorder(ids: number[]): Promise<Todo[]> {
+    return fetch(`${BASE}/reorder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }).then((r) => handle<Todo[]>(r))
+  },
 }

@@ -19,12 +19,12 @@ export function AddTodo({ onAdd }: Props) {
     <form className="add-todo" onSubmit={handleSubmit}>
       <input
         type="text"
-        placeholder="Add a new task…"
+        placeholder="想做点什么？"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        aria-label="New task title"
+        aria-label="新待办内容"
       />
-      <button type="submit">Add</button>
+      <button type="submit" aria-label="添加">＋</button>
     </form>
   )
 }
